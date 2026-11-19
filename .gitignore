@@ -1,0 +1,16 @@
+# Secrets & Environment
+.env
+*.env
+
+# Virtual Environments
+venv/
+.venv/
+env/
+
+# Python Bytecode & Build Artifacts
+__pycache__/
+*.py[cod]
+*$py.class
+build/
+dist/
+*.egg-info/

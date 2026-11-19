@@ -1,0 +1,25 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "aegis-runtime"
+version = "0.2.0"
+description = "Zero-trust deterministic flight controller for AI agents: circuit breakers, state locks, atomic rollbacks, and SHA-256 audit logs."
+readme = "README.md"
+requires-python = ">=3.9"
+license = {text = "MIT"}
+keywords = ["ai", "agents", "security", "llm", "guardrails", "deterministic", "runtime"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+]
+dependencies = []
+
+[project.optional-dependencies]
+groq = ["groq>=0.9.0"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
