@@ -15,6 +15,7 @@ class AegisRuntime:
         self.audit_log = []
         self.state_store = state_store if state_store is not None else {}
         self.snapshots = []
+        self.tools = {}
 
     def _log_event(self, tool_name, status, args):
         entry = {
@@ -62,12 +63,12 @@ class AegisRuntime:
             return wrapper
         return decorator
 
-    def guard(self, requires_state=None, sets_state=None):
+    def guard(self, _func=None, *, requires_state=None, sets_state=None):
         def decorator(func):
             @wraps(func)
             def wrapper(*args, **kwargs):
                 tool_name = func.__name__
-                
+
                 # 1. Circuit Breaker
                 self.call_counts[tool_name] = self.call_counts.get(tool_name, 0) + 1
                 if self.call_counts[tool_name] > self.max_calls:
@@ -86,5 +87,10 @@ class AegisRuntime:
                 if sets_state:
                     self.session_state.update(sets_state)
                 return result
+
+            self.tools[func.__name__] = wrapper
             return wrapper
+
+        if _func is not None:
+            return decorator(_func)
         return decorator

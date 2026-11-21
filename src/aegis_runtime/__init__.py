@@ -1,4 +1,4 @@
 from .core import AegisRuntime, SecurityViolation
+from .adapters import AegisAgentAdapter
 
-__version__ = "0.2.0"
-__all__ = ["AegisRuntime", "SecurityViolation"]
+__all__ = ["AegisRuntime", "SecurityViolation", "AegisAgentAdapter"]
