@@ -21,8 +21,10 @@ jobs:
         python-version: ${{ matrix.python-version }}
     - name: Install package in editable mode
       run: pip install -e .
-    - name: Run v0.2 & v0.3 deterministic test suite
+    - name: Run full deterministic test suite & CLI check
       run: |
         python examples/test_attack.py
         python examples/test_rollback.py
         python tests/test_adapters.py
+        python tests/test_v040.py
+        aegis --help
