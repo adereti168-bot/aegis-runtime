@@ -21,20 +21,20 @@ For full implementation details, policy schemas, and code examples, please refer
 
 Stream SHA-256 hash-chained audit logs and trigger remote Human-in-the-Loop approval gates from any Python agent:
 
-1. Open the live control plane at **https://://onrender.com** and click **Generate Free API Key** (or test immediately with `aegis_live_demo_key_001`).
+1. Open the live control plane at **https://aegis-cloud-lzcu.onrender.com** and click **Generate Free API Key** (or test immediately with `aegis_live_demo_key_001`).
 2. Connect `AegisRuntime` to your isolated workspace:
 
 ```python
 from aegis_runtime import AegisRuntime
 
 aegis = AegisRuntime(
-    telemetry_url="https://://onrender.com/v1/events",
+    telemetry_url="https://aegis-cloud-lzcu.onrender.com/v1/events",
     api_key="aegis_live_demo_key_001",
 )
 
 @aegis.guard(max_args={"amount": 500}, require_approval=True)
 def transfer_funds(amount: float, recipient: str):
-    return f"Sent \${amount} to {recipient}"
+    return f"Sent ${amount} to {recipient}"
 ```
 
 ## License
