@@ -2,7 +2,7 @@ import argparse
 import hashlib
 import json
 import sys
-from aegis_runtime.core import GENESIS_HASH
+from aegis_runtime.core import AegisRuntime, GENESIS_HASH
 
 
 def verify_audit_file(filepath):
@@ -51,6 +51,17 @@ def verify_audit_file(filepath):
     return 0
 
 
+def harden_audit_file(filepath, out_path):
+    if verify_audit_file(filepath) != 0:
+        print("[ABORTED] Refusing to synthesize policy from tampered or invalid audit log.")
+        return 1
+    entries = json.loads(open(filepath, "r", encoding="utf-8").read())
+    pol = AegisRuntime.synthesize_policy(entries)
+    with open(out_path, "w", encoding="utf-8") as f:
+        json.dump(pol, f, indent=2)
+    print(f"[HARDENED] Synthesized policy with {len(pol['rules'])} tool rule(s) -> {out_path}")
+    return 0
+
 def main():
     parser = argparse.ArgumentParser(
         prog="aegis",
@@ -63,9 +74,15 @@ def main():
     )
     verify_parser.add_argument("filepath", help="Path to the exported JSON audit log file")
 
+    harden_parser = subparsers.add_parser("harden", help="Synthesize hardened Policy-as-Code from a verified audit log")
+    harden_parser.add_argument("filepath", help="Path to verified JSON audit log")
+    harden_parser.add_argument("-o", "--output", default="aegis_policy.synthesized.json", help="Output policy JSON path")
+
     args = parser.parse_args()
     if args.command == "verify":
         sys.exit(verify_audit_file(args.filepath))
+    if args.command == "harden":
+        sys.exit(harden_audit_file(args.filepath, args.output))
 
 
 if __name__ == "__main__":

@@ -1,8 +1,10 @@
+import re
 import copy
 import hashlib
 import inspect
 import json
 import os
+import statistics
 import sys
 import threading
 import time
@@ -33,6 +35,8 @@ class AegisRuntime:
         self.state_store = state_store if state_store is not None else {}
         self.snapshots = []
         self.tools = {}
+        self.executed_tools = []
+        self.arg_baselines = {}
         self.policy = policy or {}
         self.approval_handler = approval_handler
         self.telemetry_url = telemetry_url or os.environ.get("AEGIS_TELEMETRY_URL")
@@ -122,6 +126,37 @@ class AegisRuntime:
         self.audit_log.append(payload)
         self._emit_telemetry(payload)
 
+    @staticmethod
+    def synthesize_policy(entries, headroom=1.25):
+        """Synthesize hardened Policy-as-Code rules from verified SHA-256 audit logs."""
+        rules = {}
+        prior_tools = []
+        for e in entries:
+            tool = e.get("tool")
+            status = e.get("status", "")
+            if not tool:
+                continue
+            r = rules.setdefault(tool, {"max_args": {}, "require_approval": False, "require_sequence": []})
+            if status.startswith("BLOCKED_"):
+                r["require_approval"] = True
+            if status == "EXECUTED":
+                if prior_tools and not r["require_sequence"]:
+                    r["require_sequence"] = [prior_tools[-1]]
+                if tool not in prior_tools:
+                    prior_tools.append(tool)
+                raw_args = str(e.get("args", ""))
+                for m in re.finditer(r"'([a-zA-Z0-9_]+)'\s*:\s*(-?\d+(?:\.\d+)?)", raw_args):
+                    k, v = m.group(1), float(m.group(2))
+                    ceil = round(v * headroom, 2)
+                    if ceil > r["max_args"].get(k, 0):
+                        r["max_args"][k] = ceil
+        for r in rules.values():
+            if not r["max_args"]:
+                r.pop("max_args")
+            if not r["require_sequence"]:
+                r.pop("require_sequence")
+        return {"max_calls": 5, "synthesized": True, "rules": rules}
+
     def export_audit_log(self, filepath="aegis_audit.json"):
         """Export the SHA-256 hash-chained audit trail to a JSON file."""
         with open(filepath, "w", encoding="utf-8") as f:
@@ -196,6 +231,9 @@ class AegisRuntime:
         sets_state=None,
         max_args=None,
         require_approval=False,
+        forbid_after=None,
+        require_sequence=None,
+        anomaly_multiplier=None,
     ):
         def decorator(func):
             sig = inspect.signature(func)
@@ -209,6 +247,9 @@ class AegisRuntime:
                 eff_sets = {**(sets_state or {}), **tool_policy.get("sets_state", {})}
                 eff_max_args = {**(max_args or {}), **tool_policy.get("max_args", {})}
                 eff_approval = bool(require_approval or tool_policy.get("require_approval", False))
+                eff_forbid_after = list(forbid_after or []) + list(tool_policy.get("forbid_after", []))
+                eff_req_seq = list(require_sequence or []) + list(tool_policy.get("require_sequence", []))
+                eff_anom_mult = anomaly_multiplier if anomaly_multiplier is not None else tool_policy.get("anomaly_multiplier")
 
                 bound = sig.bind_partial(*args, **kwargs)
                 bound.apply_defaults()
@@ -241,6 +282,20 @@ class AegisRuntime:
                             )
                             raise SecurityViolation(reason)
 
+                # 2b. Causal Exfiltration & Sequence Guards
+                if eff_forbid_after:
+                    tainted = [t for t in eff_forbid_after if t in self.executed_tools]
+                    if tainted:
+                        reason = f"Exfiltration guard: {tool_name} forbidden after {tainted[0]}"
+                        self._log_event(tool_name, "BLOCKED_EXFILTRATION", bound_dict, violated_field="forbid_after", blocked_reason=reason)
+                        raise SecurityViolation(reason)
+                if eff_req_seq:
+                    missing = [t for t in eff_req_seq if t not in self.executed_tools]
+                    if missing:
+                        reason = f"Sequence violation: {tool_name} requires prior execution of {missing[0]}"
+                        self._log_event(tool_name, "BLOCKED_SEQUENCE", bound_dict, violated_field="require_sequence", blocked_reason=reason)
+                        raise SecurityViolation(reason)
+
                 # 3. Deterministic Numeric Parameter Ceiling (Policy-as-Code)
                 if eff_max_args:
                     for arg_name, ceiling in eff_max_args.items():
@@ -259,6 +314,18 @@ class AegisRuntime:
                                     blocked_reason=reason,
                                 )
                                 raise SecurityViolation(reason)
+
+                # 3b. Statistical Behavioral Anomaly Detector
+                if eff_anom_mult is not None:
+                    for arg_name, val in bound.arguments.items():
+                        if isinstance(val, (int, float)) and not isinstance(val, bool):
+                            hist = self.arg_baselines.get((tool_name, arg_name), [])
+                            if len(hist) >= 3:
+                                mean_val = statistics.mean(hist)
+                                if mean_val > 0 and val > mean_val * float(eff_anom_mult):
+                                    reason = f"Behavioral anomaly: {tool_name} '{arg_name}'={val} exceeds {eff_anom_mult}x baseline ({mean_val:.2f})"
+                                    self._log_event(tool_name, "BLOCKED_ANOMALY", bound_dict, violated_field=arg_name, blocked_reason=reason)
+                                    raise SecurityViolation(reason)
 
                 # 4. Human-in-the-Loop Approval Gate
                 approver_id = None
@@ -280,6 +347,10 @@ class AegisRuntime:
                     approval_state = "APPROVED"
 
                 result = func(*args, **kwargs)
+                self.executed_tools.append(tool_name)
+                for arg_name, val in bound.arguments.items():
+                    if isinstance(val, (int, float)) and not isinstance(val, bool):
+                        self.arg_baselines.setdefault((tool_name, arg_name), []).append(float(val))
                 self._log_event(
                     tool_name,
                     "EXECUTED",
