@@ -62,3 +62,18 @@ def transfer_funds(amount: float, recipient: str):
 ## License
 
 MIT License
+
+## v0.7.0: Zero-Dependency MCP Firewall & Instant CLI Demo
+
+Test deterministic exfiltration blocking and SHA-256 audit verification in one command:
+
+```bash
+aegis demo
+aegis verify aegis_demo_audit.json
+```
+
+Wrap any `stdio` MCP server (Claude Desktop, Cursor, Windsurf, custom agents) with deterministic guardrails without changing server code:
+
+```bash
+aegis mcp-proxy --policy aegis_policy.json -- python my_mcp_server.py
+```

@@ -3,6 +3,7 @@ import hashlib
 import json
 import sys
 from aegis_runtime.core import AegisRuntime, GENESIS_HASH
+from aegis_runtime.mcp_proxy import AegisMCPProxy, run_interactive_demo
 
 
 def verify_audit_file(filepath):
@@ -78,7 +79,26 @@ def main():
     harden_parser.add_argument("filepath", help="Path to verified JSON audit log")
     harden_parser.add_argument("-o", "--output", default="aegis_policy.synthesized.json", help="Output policy JSON path")
 
+    demo_parser = subparsers.add_parser("demo", help="Run a live deterministic exfiltration-block & SHA-256 audit demo")
+    demo_parser.add_argument("-o", "--output", default="aegis_demo_audit.json", help="Output demo audit log path")
+
+    mcp_parser = subparsers.add_parser("mcp-proxy", help="Wrap any stdio MCP server with deterministic Aegis guardrails")
+    mcp_parser.add_argument("-p", "--policy", default=None, help="Path to aegis_policy.json")
+    mcp_parser.add_argument("-o", "--audit-out", default="aegis_mcp_audit.json", help="Audit log output path")
+    mcp_parser.add_argument("--telemetry-url", default=None, help="Optional Aegis Cloud telemetry URL")
+    mcp_parser.add_argument("--api-key", default=None, help="Optional Aegis Cloud API key")
+    mcp_parser.add_argument("server_cmd", nargs=argparse.REMAINDER, help="Command to launch target MCP server (e.g. -- python server.py)")
+
     args = parser.parse_args()
+    if args.command == "demo":
+        sys.exit(run_interactive_demo(args.output))
+    if args.command == "mcp-proxy":
+        cmd = args.server_cmd[1:] if args.server_cmd and args.server_cmd[0] == "--" else args.server_cmd
+        if not cmd:
+            print("[ERROR] Provide an MCP server command, e.g.: aegis mcp-proxy -- python server.py")
+            sys.exit(1)
+        proxy = AegisMCPProxy(cmd, policy_path=args.policy, audit_out=args.audit_out, telemetry_url=args.telemetry_url, api_key=args.api_key)
+        sys.exit(proxy.run())
     if args.command == "verify":
         sys.exit(verify_audit_file(args.filepath))
     if args.command == "harden":
