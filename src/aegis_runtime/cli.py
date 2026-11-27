@@ -1,3 +1,4 @@
+import os
 import argparse
 import hashlib
 import json
@@ -5,6 +6,51 @@ import sys
 from aegis_runtime.core import AegisRuntime, GENESIS_HASH
 from aegis_runtime.mcp_proxy import AegisMCPProxy, run_interactive_demo
 
+
+
+STARTER_POLICY = {'max_calls': 25, 'rules': {'read_customer_db': {'max_calls': 10}, 'send_external_email': {'forbid_after': ['read_customer_db'], 'require_approval': True}, 'execute_payment': {'max_args': {'amount': 500}, 'require_approval': True}}}
+
+def init_policy_file(out_path, force=False):
+    if os.path.exists(out_path) and not force:
+        print(f'[EXISTS] {out_path} already exists. Pass --force to overwrite.')
+        return 1
+    parent = os.path.dirname(os.path.abspath(out_path))
+    if parent and not os.path.exists(parent):
+        os.makedirs(parent, exist_ok=True)
+    with open(out_path, 'w', encoding='utf-8') as f:
+        json.dump(STARTER_POLICY, f, indent=2)
+    print(f'[INIT] Created starter Aegis policy -> {out_path}')
+    return 0
+
+def generate_mcp_config(name, policy_path, server_cmd, write_path=None):
+    if not server_cmd:
+        print('[ERROR] Provide an MCP server command, e.g.: aegis mcp-config -- python server.py')
+        return 1
+    entry = {'command': 'aegis', 'args': ['mcp-proxy', '--policy', policy_path, '--'] + list(server_cmd)}
+    if write_path:
+        cfg = {'mcpServers': {}}
+        if os.path.exists(write_path):
+            try:
+                with open(write_path, 'r', encoding='utf-8') as f:
+                    loaded = json.load(f)
+                if isinstance(loaded, dict):
+                    cfg = loaded
+            except json.JSONDecodeError as e:
+                print(f'[ERROR] Invalid JSON at {write_path}: {e}')
+                return 1
+        if not isinstance(cfg.get('mcpServers'), dict):
+            cfg['mcpServers'] = {}
+        cfg['mcpServers'][name] = entry
+        parent = os.path.dirname(os.path.abspath(write_path))
+        if parent and not os.path.exists(parent):
+            os.makedirs(parent, exist_ok=True)
+        with open(write_path, 'w', encoding='utf-8') as f:
+            json.dump(cfg, f, indent=2)
+        print(f'[CONFIG] Updated {write_path} with Aegis-wrapped MCP server {name}.')
+        return 0
+    print('[CONFIG] Paste into Claude Desktop or Cursor mcp.json:')
+    print(json.dumps({'mcpServers': {name: entry}}, indent=2))
+    return 0
 
 def verify_audit_file(filepath):
     try:
@@ -70,6 +116,14 @@ def main():
     )
     subparsers = parser.add_subparsers(dest="command", required=True)
 
+    init_p = subparsers.add_parser('init', help='Scaffold a starter aegis_policy.json file')
+    init_p.add_argument('-o', '--output', default='aegis_policy.json')
+    init_p.add_argument('--force', action='store_true')
+    cfg_p = subparsers.add_parser('mcp-config', help='Generate or update Claude Desktop / Cursor MCP config')
+    cfg_p.add_argument('--name', default='my-mcp-server')
+    cfg_p.add_argument('-p', '--policy', default='aegis_policy.json')
+    cfg_p.add_argument('-w', '--write', default=None)
+    cfg_p.add_argument('server_cmd', nargs=argparse.REMAINDER)
     verify_parser = subparsers.add_parser(
         "verify", help="Verify cryptographic integrity of an exported Aegis SHA-256 audit log"
     )
@@ -90,6 +144,11 @@ def main():
     mcp_parser.add_argument("server_cmd", nargs=argparse.REMAINDER, help="Command to launch target MCP server (e.g. -- python server.py)")
 
     args = parser.parse_args()
+    if args.command == 'init':
+        sys.exit(init_policy_file(args.output, force=args.force))
+    if args.command == 'mcp-config':
+        cmd = args.server_cmd[1:] if args.server_cmd and args.server_cmd[0] == '--' else args.server_cmd
+        sys.exit(generate_mcp_config(args.name, args.policy, cmd, write_path=args.write))
     if args.command == "demo":
         sys.exit(run_interactive_demo(args.output))
     if args.command == "mcp-proxy":

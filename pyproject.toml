@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "aegis-runtime"
-version = "0.7.0"
+version = "0.8.0"
 description = "Zero-trust deterministic flight controller for AI agents: circuit breakers, state locks, human-in-the-loop approvals, policy-as-code, atomic rollbacks, and SHA-256 audit logs."
 readme = "README.md"
 requires-python = ">=3.9"

@@ -1,10 +1,15 @@
-# Aegis Runtime (`aegis-runtime`) v0.6.0
+# Aegis Runtime (`aegis-runtime`) v0.8.0
 
 **Zero-trust deterministic flight controller and autonomous behavioral defense for AI agents** featuring causal exfiltration guards, statistical anomaly detection, self-hardening policy synthesis, circuit breakers, state locks, human-in-the-loop approval gates, atomic rollbacks, and SHA-256 tamper-proof audit logs with zero external dependencies.
 
 ```bash
 pip install aegis-runtime
 ```
+
+## What's New in v0.8.0
+
+* **Zero-Config MCP Onboarding (`aegis init` & `aegis mcp-config`)**: Scaffold a starter `aegis_policy.json` in one command (`aegis init`) and generate or merge wrapped `mcpServers` configs for Claude Desktop and Cursor (`aegis mcp-config --write .cursor/mcp.json -- python server.py`).
+* **Zero-Dependency `stdio` MCP Firewall (`aegis mcp-proxy`)**: Wrap any MCP server over JSON-RPC (`aegis mcp-proxy --policy aegis_policy.json -- python server.py`) to intercept `tools/call` requests, block causal exfiltration, and emit tamper-proof SHA-256 audit logs-or test live with `aegis demo`.
 
 ## What's New in v0.6.0
 
