@@ -1,6 +1,7 @@
 import re
 import copy
 import hashlib
+import hmac
 import inspect
 import json
 import os
@@ -27,6 +28,7 @@ class AegisRuntime:
         approval_handler=None,
         telemetry_url=None,
         api_key=None,
+        signing_secret=None,
     ):
         self.max_calls = max_calls
         self.call_counts = {}
@@ -41,6 +43,7 @@ class AegisRuntime:
         self.approval_handler = approval_handler
         self.telemetry_url = telemetry_url or os.environ.get("AEGIS_TELEMETRY_URL")
         self.api_key = api_key or os.environ.get("AEGIS_API_KEY")
+        self.signing_secret = signing_secret or os.environ.get("AEGIS_SIGNING_SECRET")
 
         if "max_calls" in self.policy:
             self.max_calls = self.policy["max_calls"]
@@ -53,6 +56,7 @@ class AegisRuntime:
         approval_handler=None,
         telemetry_url=None,
         api_key=None,
+        signing_secret=None,
     ):
         """Load deterministic Policy-as-Code rules from a JSON file."""
         with open(policy_path, "r", encoding="utf-8") as f:
@@ -64,6 +68,7 @@ class AegisRuntime:
             approval_handler=approval_handler,
             telemetry_url=telemetry_url,
             api_key=api_key,
+            signing_secret=signing_secret,
         )
 
     def _emit_telemetry(self, payload):
@@ -123,8 +128,40 @@ class AegisRuntime:
         canonical = json.dumps(payload, sort_keys=True)
         entry_hash = hashlib.sha256(canonical.encode("utf-8")).hexdigest()
         payload["hash"] = entry_hash
+        if self.signing_secret:
+            payload["hmac_sig"] = hmac.new(self.signing_secret.encode("utf-8"), entry_hash.encode("utf-8"), hashlib.sha256).hexdigest()
         self.audit_log.append(payload)
         self._emit_telemetry(payload)
+
+
+    @staticmethod
+    def verify_audit_entries(entries, signing_secret=None):
+        if not isinstance(entries, list) or len(entries) == 0:
+            return False, "Audit log is empty or invalid format."
+        expected_prev = GENESIS_HASH
+        all_signed = True
+        for i, entry in enumerate(entries):
+            if "hash" not in entry or "prev_hash" not in entry:
+                return False, f"Entry #{i} is missing cryptographic hash fields."
+            if entry["prev_hash"] != expected_prev:
+                return False, f"Broken hash chain at entry #{i} (tool={entry.get('tool')})."
+            recorded_hash = entry["hash"]
+            payload = {k: v for k, v in entry.items() if k not in ("hash", "hmac_sig")}
+            computed_hash = hashlib.sha256(json.dumps(payload, sort_keys=True).encode("utf-8")).hexdigest()
+            if recorded_hash != computed_hash:
+                return False, f"Payload modified at entry #{i} (tool={entry.get('tool')})."
+            if signing_secret:
+                sig = entry.get("hmac_sig")
+                if not sig:
+                    return False, f"Missing HMAC signature at entry #{i}."
+                expected_sig = hmac.new(signing_secret.encode("utf-8"), recorded_hash.encode("utf-8"), hashlib.sha256).hexdigest()
+                if not hmac.compare_digest(sig, expected_sig):
+                    return False, f"Invalid HMAC signature at entry #{i}."
+            elif "hmac_sig" not in entry:
+                all_signed = False
+            expected_prev = recorded_hash
+        mode = "HMAC-SHA256 attested" if (signing_secret or all_signed) else "SHA-256 hash-chained"
+        return True, f"{len(entries)} {mode} entries verified. Head: {expected_prev}"
 
     @staticmethod
     def synthesize_policy(entries, headroom=1.25):

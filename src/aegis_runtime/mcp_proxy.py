@@ -7,7 +7,7 @@ from aegis_runtime.core import AegisRuntime, SecurityViolation
 
 
 class AegisMCPProxy:
-    def __init__(self, server_cmd, policy_path=None, audit_out="aegis_mcp_audit.json", telemetry_url=None, api_key=None):
+    def __init__(self, server_cmd, policy_path=None, audit_out="aegis_mcp_audit.json", telemetry_url=None, api_key=None, signing_secret=None):
         if not server_cmd:
             raise ValueError("server_cmd must contain at least one executable argument")
         self.server_cmd = list(server_cmd)
@@ -18,6 +18,7 @@ class AegisMCPProxy:
                 approval_handler=lambda tool, kwargs: False,
                 telemetry_url=telemetry_url,
                 api_key=api_key,
+                signing_secret=signing_secret,
             )
         else:
             self.runtime = AegisRuntime(
@@ -25,6 +26,7 @@ class AegisMCPProxy:
                 approval_handler=lambda tool, kwargs: False,
                 telemetry_url=telemetry_url,
                 api_key=api_key,
+                signing_secret=signing_secret,
             )
         self._guards = {}
 

@@ -1,4 +1,4 @@
-# Aegis Runtime (`aegis-runtime`) v0.8.0
+# Aegis Runtime (`aegis-runtime`) v0.9.0
 
 **Zero-trust deterministic flight controller and autonomous behavioral defense for AI agents** featuring causal exfiltration guards, statistical anomaly detection, self-hardening policy synthesis, circuit breakers, state locks, human-in-the-loop approval gates, atomic rollbacks, and SHA-256 tamper-proof audit logs with zero external dependencies.
 
